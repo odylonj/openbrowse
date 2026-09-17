@@ -13,13 +13,26 @@ import { WEB_LLM_MODEL_CONTEXT } from "./web-llm-model-context";
  * but reliability is unverified, so only these carry `tools` (and thus qualify
  * as the browser agent — see `agentModelGate`) until an empirical per-model
  * tool probe says otherwise.
+ *
+ * Qwen3 models (4B and 1.7B) are added based on empirical validation that
+ * the prompt-based tool calling mechanism in @browser-ai/web-llm works
+ * reliably with these models. They have 40K context windows, exceeding the
+ * minimum required by agentModelGate.
  */
 const TOOLS_MODEL_IDS = new Set<string>([
+  // Hermes models (native function-calling support in WebLLM)
   "Hermes-2-Pro-Llama-3-8B-q4f16_1-MLC",
   "Hermes-2-Pro-Llama-3-8B-q4f32_1-MLC",
   "Hermes-2-Pro-Mistral-7B-q4f16_1-MLC",
   "Hermes-3-Llama-3.1-8B-q4f32_1-MLC",
   "Hermes-3-Llama-3.1-8B-q4f16_1-MLC",
+  // Qwen3 models (validated via prompt-based tool calling in @browser-ai/web-llm)
+  // Qwen3 4B — primary target: 40K context, ~3.4 GB VRAM (q4f16)
+  "Qwen3-4B-q4f16_1-MLC",
+  "Qwen3-4B-q4f32_1-MLC",
+  // Qwen3 1.7B — lighter alternative: 40K context, ~2 GB VRAM (q4f16)
+  "Qwen3-1.7B-q4f16_1-MLC",
+  "Qwen3-1.7B-q4f32_1-MLC",
 ]);
 
 /**

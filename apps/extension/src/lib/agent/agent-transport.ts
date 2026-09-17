@@ -1016,6 +1016,21 @@ export function createBrowserToolSet(
   };
 }
 
+const LIGHT_LOCAL_QWEN3_TOOLS = new Set([
+  "readPage",
+  "snapshot",
+  "clickElement",
+  "typeInElement",
+  "navigate",
+  "listTabs",
+  "selectTab",
+  "scrollPage",
+]);
+
+function isLightLocalQwen3(providerId: string, modelId: string): boolean {
+  return providerId === "web-llm" && /^Qwen3-(?:4B|1\.7B)-/.test(modelId);
+}
+
 export function buildExtensionToolContext(
   pinnedConversationId: string | null,
   pinnedSpaceId: string | null = null,
@@ -2328,6 +2343,7 @@ export async function createAgentTransport(
   // (1M window) or Claude Sonnet 4.5 (200K window).
   const modelDef = provider.models.find((m) => m.id === actualModelId);
   setCurrentModelDef(modelDef);
+  const lightLocalQwen3 = isLightLocalQwen3(provider.id, actualModelId);
 
   // Headless (scheduled) run: register the per-conversation policy so the
   // tool wrapper's approval gate auto-approves (or the tool set excludes
@@ -2697,7 +2713,13 @@ To minimize wasted rejection rounds: before producing a final response, re-read 
 
   // Compose the parent's full tool set BEFORE constructing `runSubagentAgentLoop`,
   // because the loop filters from this set when building the subagent's tools.
-  const parentTools = { ...browserTools, ...mcpTools };
+  const parentTools = lightLocalQwen3
+    ? Object.fromEntries(
+        Object.entries(browserTools).filter(([name]) =>
+          LIGHT_LOCAL_QWEN3_TOOLS.has(name),
+        ),
+      )
+    : { ...browserTools, ...mcpTools };
 
   // Tools available ONLY inside a subagent run — never exposed to the
   // parent. `setTaskTitle` is the lone entry: it's how a subagent
@@ -2719,6 +2741,11 @@ To minimize wasted rejection rounds: before producing a final response, re-read 
     actualModelId,
     thinkingConfig,
   ) as ToolLoopAgentSettings["providerOptions"];
+  const localQwen3ProviderOptions = lightLocalQwen3
+    ? { "web-llm": { extra_body: { enable_thinking: false } } }
+    : undefined;
+  const effectiveProviderOptions =
+    localQwen3ProviderOptions ?? providerOptions;
 
   // The runner that the `delegate` tool uses to actually spawn a nested
   // ToolLoopAgent. Closes over `model`, `parentTools`, and `providerOptions`;
@@ -2980,7 +3007,9 @@ To minimize wasted rejection rounds: before producing a final response, re-read 
       model,
       tools: subagentTools,
       instructions: cfg.systemPrompt,
-      ...(providerOptions && { providerOptions }),
+      ...(effectiveProviderOptions && {
+        providerOptions: effectiveProviderOptions,
+      }),
       experimental_context: cfg.toolContext,
       onStepFinish: (stepResult) => {
         stepCount += 1;
@@ -3109,7 +3138,9 @@ To minimize wasted rejection rounds: before producing a final response, re-read 
       // runs share the SW realm. Other tools in `parentTools` already
       // pass `cid` through `createBrowserToolSet(conversationId)`; this
       // closes the last gap.
-      delegate: toSDKTool(delegateTool, "delegate", conversationId),
+      ...(lightLocalQwen3
+        ? {}
+        : { delegate: toSDKTool(delegateTool, "delegate", conversationId) }),
     };
     if (!headless) return base;
     // Headless (scheduled) run: never spawn subagents UNLESS the
@@ -3353,7 +3384,10 @@ To minimize wasted rejection rounds: before producing a final response, re-read 
     model,
     tools,
     instructions,
-    ...(providerOptions && { providerOptions }),
+    ...(effectiveProviderOptions && {
+      providerOptions: effectiveProviderOptions,
+    }),
+    ...(lightLocalQwen3 && { maxOutputTokens: 2_048 }),
     // Note: we deliberately do NOT thread an `experimental_context` here.
     // Every tool registered with this agent is wrapped by `toSDKTool`,
     // which builds a fresh `ToolContext` per tool call pinned to the
@@ -3503,7 +3537,13 @@ Stay within the approved sites. If you need to touch a site not listed, call \`p
       // Record connectors/skills used this step onto the conversation row so
       // the Context card surfaces them live (mirrors how todoWrite persists
       // todos mid-turn, instead of waiting for end-of-turn message persistence).
-      void recordToolUsageForStep(transportCid(), stepResult.toolCalls);
+      void recordToolUsageForStep(
+        transportCid(),
+        stepResult.toolCalls.filter(Boolean) as readonly {
+          toolName: string;
+          input?: unknown;
+        }[],
+      );
       // Persist the token/cost usage snapshot for the header Context popover.
       // Fire-and-forget; serialized per-conversation alongside tool usage.
       void recordUsageForStep(
