@@ -34,6 +34,13 @@ export const definition: ProviderDefinition = {
       contextWindow: 16384,
       maxOutputTokens: 4096,
     },
+    {
+      id: "qwen2.5:3b",
+      name: "Qwen2.5 3B (Ollama)",
+      capabilities: ["chat", "tools"],
+      contextWindow: 16384,
+      maxOutputTokens: 2048,
+    },
   ],
   async createLanguageModel(config, modelId) {
     const { createOpenAI } = await import("@ai-sdk/openai");
