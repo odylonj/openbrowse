@@ -2343,6 +2343,7 @@ export async function createAgentTransport(
   // (1M window) or Claude Sonnet 4.5 (200K window).
   const modelDef = provider.models.find((m) => m.id === actualModelId);
   setCurrentModelDef(modelDef);
+  const isOllamaLocal = provider.id === "ollama-local";
   const lightLocalQwen3 = isLightLocalQwen3(provider.id, actualModelId);
 
   // Headless (scheduled) run: register the per-conversation policy so the
@@ -2711,11 +2712,46 @@ To minimize wasted rejection rounds: before producing a final response, re-read 
     instructions += `\n\n## Available Skills\n\nYou have access to the following skills. Each skill is knowledge you can load on demand. When a user's request matches a skill's description, call skill({ name }) to load its full instructions into the conversation BEFORE you start the work — do this even when you think you already know how, because skills carry workflow and verification steps that are easy to skip from memory. Already knowing the relevant API or concept is not a reason to skip loading the matching skill.\n\n${skillsSection}\n\nTo install a new skill from a URL or GitHub repo, use install_skill({ source }).\nTo read a file bundled with a skill, use Read({ file_path }) with the skill's path (e.g. "/skills/<name>/references/<file>").\nTo author and install a new skill you've drafted for the user, use create_skill.`;
   }
 
+  if (isOllamaLocal) {
+    instructions += `\n\n## Local Lite Mode\nYou are running on a local Ollama model. For general queries, math, or direct questions that do not require inspecting the browser ("Réponds uniquement : 2", etc.), answer directly with text without calling any tools. Only use browser tools when explicitly requested or required by the task. Keep outputs concise.`;
+  }
+
+  let effectiveBrowserTools = browserTools;
+  if (isOllamaLocal) {
+    effectiveBrowserTools = Object.fromEntries(
+      Object.entries(browserTools).map(([name, tool]) => {
+        if ((name === "readPage" || name === "snapshot") && tool.execute) {
+          const originalExecute = tool.execute;
+          return [
+            name,
+            {
+              ...tool,
+              execute: async (args: any, context: any) => {
+                const res = await originalExecute(args, context);
+                if (typeof res === "string" && res.length > 2000) {
+                  return res.substring(0, 2000) + "\n[truncated for local lite]";
+                }
+                if (res && typeof res === "object" && "content" in res && typeof (res as any).content === "string" && (res as any).content.length > 2000) {
+                  return {
+                    ...(res as any),
+                    content: (res as any).content.substring(0, 2000) + "\n[truncated for local lite]",
+                  };
+                }
+                return res;
+              },
+            },
+          ];
+        }
+        return [name, tool];
+      }),
+    );
+  }
+
   // Compose the parent's full tool set BEFORE constructing `runSubagentAgentLoop`,
   // because the loop filters from this set when building the subagent's tools.
-  const parentTools = lightLocalQwen3
+  const parentTools = (lightLocalQwen3 || isOllamaLocal)
     ? Object.fromEntries(
-        Object.entries(browserTools).filter(([name]) =>
+        Object.entries(effectiveBrowserTools).filter(([name]) =>
           LIGHT_LOCAL_QWEN3_TOOLS.has(name),
         ),
       )
@@ -3138,7 +3174,7 @@ To minimize wasted rejection rounds: before producing a final response, re-read 
       // runs share the SW realm. Other tools in `parentTools` already
       // pass `cid` through `createBrowserToolSet(conversationId)`; this
       // closes the last gap.
-      ...(lightLocalQwen3
+      ...(lightLocalQwen3 || isOllamaLocal
         ? {}
         : { delegate: toSDKTool(delegateTool, "delegate", conversationId) }),
     };
@@ -3387,6 +3423,7 @@ To minimize wasted rejection rounds: before producing a final response, re-read 
     ...(effectiveProviderOptions && {
       providerOptions: effectiveProviderOptions,
     }),
+    ...(isOllamaLocal && { maxOutputTokens: 512, maxSteps: 4 }),
     ...(lightLocalQwen3 && { maxOutputTokens: 2_048 }),
     // Note: we deliberately do NOT thread an `experimental_context` here.
     // Every tool registered with this agent is wrapped by `toSDKTool`,
