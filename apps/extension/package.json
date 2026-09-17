@@ -40,7 +40,7 @@
     "@fontsource/ibm-plex-sans": "^5.2.8",
     "@fontsource/lilex": "^5.2.1",
     "@fontsource/young-serif": "^5.2.7",
-    "@mlc-ai/web-llm": "^0.2.82",
+    "@mlc-ai/web-llm": "0.2.82",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@openbrowse/connectors": "workspace:*",
     "@openrouter/ai-sdk-provider": "^2.9.0",
