@@ -635,8 +635,13 @@ export async function generateChatTitle(
   modelId: string,
   userMessage: string,
 ): Promise<{ title: string }> {
-  const { generateText } = await import("ai");
+  if (providerId === "ollama-local") {
+    const firstLine = (userMessage || "").trim().split("\n")[0] || "";
+    const title = firstLine.slice(0, 40).trim() || "New chat";
+    return { title };
+  }
 
+  const { generateText } = await import("ai");
   const provider = getProvider(providerId);
   if (!provider) throw new Error(`Unknown provider: ${providerId}`);
 
@@ -717,6 +722,13 @@ export async function generateGroupLabel(
     tabs: { title: string; url: string }[];
   },
 ): Promise<{ title: string; color: TabGroupColor }> {
+  if (providerId === "ollama-local") {
+    return {
+      title: (context.chatTitle || "Agent").slice(0, 24),
+      color: "grey",
+    };
+  }
+
   const { generateText } = await import("ai");
 
   const provider = getProvider(providerId);
