@@ -43,6 +43,7 @@ export const definition: ProviderDefinition = {
           const body = JSON.parse(init.body);
           if (body && typeof body === "object") {
             body.think = false;
+            body.options = { ...(body.options || {}), think: false };
             init = { ...init, body: JSON.stringify(body) };
           }
         } catch {
