@@ -37,9 +37,24 @@ export const definition: ProviderDefinition = {
   ],
   async createLanguageModel(config, modelId) {
     const { createOpenAI } = await import("@ai-sdk/openai");
+    const customFetch: typeof fetch = async (input, init) => {
+      if (init && typeof init.body === "string") {
+        try {
+          const body = JSON.parse(init.body);
+          if (body && typeof body === "object") {
+            body.think = false;
+            init = { ...init, body: JSON.stringify(body) };
+          }
+        } catch {
+          // Ignore non-JSON bodies
+        }
+      }
+      return fetch(input, init);
+    };
     const provider = createOpenAI({
       baseURL: config.baseUrl || "http://127.0.0.1:11434/v1",
       apiKey: config.apiKey || "ollama",
+      fetch: customFetch,
     });
     return provider(modelId);
   },
