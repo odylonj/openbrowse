@@ -19,6 +19,7 @@
  */
 
 import { definition as browserAi } from "./browser-ai";
+import { definition as ollamaLocal } from "./ollama-local";
 import { definition as openaiCompatible } from "./openai-compatible";
 import { definition as webLlm } from "./web-llm";
 import { isSupportedNpm } from "../models-dev/bundled-sdks";
@@ -29,7 +30,7 @@ import bundledSnapshot from "../models-dev/snapshot.json";
 import type { ModelsDevCatalog } from "../models-dev/types";
 import type { ProviderDefinition } from "./types";
 
-const SPECIAL_PROVIDERS: ProviderDefinition[] = [browserAi, webLlm, openaiCompatible];
+const SPECIAL_PROVIDERS: ProviderDefinition[] = [browserAi, webLlm, ollamaLocal, openaiCompatible];
 
 function deriveProviders(catalog: ModelsDevCatalog): ProviderDefinition[] {
   const fromCatalog: ProviderDefinition[] = [];
@@ -51,7 +52,7 @@ function deriveProviders(catalog: ModelsDevCatalog): ProviderDefinition[] {
     if (aQ !== bQ) return aQ - bQ;
     return a.name.localeCompare(b.name);
   });
-  return [browserAi, webLlm, ...fromCatalog, openaiCompatible];
+  return [browserAi, webLlm, ollamaLocal, ...fromCatalog, openaiCompatible];
 }
 
 /**
