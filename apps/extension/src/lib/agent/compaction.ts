@@ -11,9 +11,12 @@ export interface TokenLimits {
 }
 
 // Constants
-export const COMPACTION_BUFFER = 20_000;
-export const PRUNE_MINIMUM = 20_000;
-export const PRUNE_PROTECT = 40_000;
+// Buffer adapted for light local Qwen3 models (4B/1.7B) with context = 16384
+// These models have smaller context windows, so we use a proportionally smaller buffer.
+// Full buffer (20_000) would make hasCompactableContext always false for context=16384.
+export const COMPACTION_BUFFER = 2_000;
+export const PRUNE_MINIMUM = 2_000;
+export const PRUNE_PROTECT = 4_000;
 export const TOOL_OUTPUT_MAX_CHARS = 2_000;
 export const PROTECTED_TURNS = 2;
 /**
@@ -43,8 +46,7 @@ export const MIN_MESSAGES_FOR_COMPACTION = 4;
 export const COMPACTION_DEBOUNCE_MS = 30_000;
 const DEFAULT_CONTEXT_WINDOW = 128_000;
 const DEFAULT_MAX_OUTPUT = 8_000;
-const FALLBACK_USABLE_TOKENS =
-  DEFAULT_CONTEXT_WINDOW - DEFAULT_MAX_OUTPUT - COMPACTION_BUFFER;
+const FALLBACK_USABLE_TOKENS = 4_000;
 
 const COMPACTION_SYSTEM_PROMPT = `You are a context summarization assistant for a browser agent session.
 
