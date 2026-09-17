@@ -31,7 +31,8 @@ export const definition: ProviderDefinition = {
       id: "qwen3:4b",
       name: "Qwen3 4B (Ollama)",
       capabilities: ["chat", "tools", "thinking"],
-      contextWindow: 4096,
+      contextWindow: 16384,
+      maxOutputTokens: 4096,
     },
   ],
   async createLanguageModel(config, modelId) {
