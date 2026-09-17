@@ -28,22 +28,22 @@ export const definition: ProviderDefinition = {
   ],
   models: [
     {
-      id: "qwen3:4b",
-      name: "Qwen3 4B (Ollama)",
-      capabilities: ["chat", "tools", "thinking"],
-      contextWindow: 16384,
-      maxOutputTokens: 4096,
-    },
-    {
       id: "qwen2.5:3b",
       name: "Qwen2.5 3B (Ollama)",
       capabilities: ["chat", "tools"],
       contextWindow: 16384,
       maxOutputTokens: 2048,
     },
+    {
+      id: "qwen3:4b",
+      name: "Qwen3 4B (Ollama)",
+      capabilities: ["chat", "tools", "thinking"],
+      contextWindow: 16384,
+      maxOutputTokens: 4096,
+    },
   ],
   async createLanguageModel(config, modelId) {
-    const { createOpenAI } = await import("@ai-sdk/openai");
+    const { createOpenAICompatible } = await import("@ai-sdk/openai-compatible");
     const customFetch: typeof fetch = async (input, init) => {
       if (init && typeof init.body === "string") {
         try {
@@ -59,7 +59,8 @@ export const definition: ProviderDefinition = {
       }
       return fetch(input, init);
     };
-    const provider = createOpenAI({
+    const provider = createOpenAICompatible({
+      name: "ollama",
       baseURL: config.baseUrl || "http://127.0.0.1:11434/v1",
       apiKey: config.apiKey || "ollama",
       fetch: customFetch,
