@@ -49,16 +49,26 @@ export const definition: ProviderDefinition = {
         try {
           const body = JSON.parse(init.body);
           if (body && typeof body === "object") {
+            const startTime = Date.now();
             const msgCount = Array.isArray(body.messages) ? body.messages.length : 0;
             const toolsCount = Array.isArray(body.tools) ? body.tools.length : 0;
             const toolNames = Array.isArray(body.tools) ? body.tools.map((t: any) => t.function?.name || t.type).join(", ") : "none";
             const charLength = init.body.length;
             const estTokens = Math.ceil(charLength / 4);
-            console.log(`[Ollama Local Diagnostic] Messages: ${msgCount} | Chars: ${charLength} (~${estTokens} tokens) | Tools: ${toolsCount} [${toolNames}]`);
+
+            const sysMsg = body.messages?.find((m: any) => m.role === "system");
+            const sysChars = sysMsg?.content?.length ?? 0;
+            const histChars = charLength - sysChars;
+
+            console.log(`[Ollama Local Latency & Payload] at ${new Date().toISOString()} | Messages: ${msgCount} | Sys Prompt Chars: ${sysChars} | History/Msgs Chars: ${histChars} | Total Chars: ${charLength} (~${estTokens} tokens) | Tools: ${toolsCount} [${toolNames}]`);
 
             body.think = false;
-            body.options = { ...(body.options || {}), think: false };
+            body.options = { ...(body.options || {}), think: false, keep_alive: "30m" };
             init = { ...init, body: JSON.stringify(body) };
+
+            const res = await fetch(input, init);
+            console.log(`[Ollama Local Latency] Response received in ${Date.now() - startTime}ms`);
+            return res;
           }
         } catch {
           // Ignore non-JSON bodies

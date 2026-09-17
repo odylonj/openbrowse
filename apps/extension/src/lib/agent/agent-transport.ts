@@ -3424,7 +3424,7 @@ To minimize wasted rejection rounds: before producing a final response, re-read 
     ...(effectiveProviderOptions && {
       providerOptions: effectiveProviderOptions,
     }),
-    ...(isOllamaLocal && { maxOutputTokens: 512, maxSteps: 4 }),
+    ...(isOllamaLocal && { maxOutputTokens: 512, maxSteps: 6 }),
     ...(lightLocalQwen3 && { maxOutputTokens: 2_048 }),
     // Note: we deliberately do NOT thread an `experimental_context` here.
     // Every tool registered with this agent is wrapped by `toSDKTool`,

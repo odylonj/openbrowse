@@ -272,6 +272,17 @@ export async function getActiveUserTab(opts: {
     }
   }
 
+  // Fallback: query all tabs in the window and pick the first non-internal tab
+  const allTabs = await chrome.tabs.query(scopedWindowId !== undefined ? { windowId: scopedWindowId } : { currentWindow: true });
+  for (const tab of allTabs) {
+    if (tab.id && !isInternalChromeUrl(tab.url)) {
+      const ltid = tabRegistry.registerExisting(tab.id);
+      if (cid != null) targetLtidByCid.set(cid, ltid);
+      else fallbackTargetLtid = ltid;
+      return tab;
+    }
+  }
+
   throw new Error(
     "No agent target tab. Call navigate(url) to open a work tab, or selectTab to choose one.",
   );
