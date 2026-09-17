@@ -110,6 +110,7 @@ import { buildEditingArtifactBlock } from "./artifact-edit-context";
 import {
   CHAT_ONLY_SYSTEM_PROMPT,
   CUA_DELEGATION_PROMPT,
+  LOCAL_LITE_SYSTEM_PROMPT,
   SYSTEM_PROMPT,
 } from "./system-prompt";
 
@@ -2488,7 +2489,7 @@ export async function createAgentTransport(
 
   const mcpToolsList = getMcpRegistry().getAllTools();
   const mcpStates = getMcpRegistry().getStates();
-  let instructions = SYSTEM_PROMPT;
+  let instructions = isOllamaLocal ? LOCAL_LITE_SYSTEM_PROMPT : SYSTEM_PROMPT;
 
   // Headless-run prefix (A9, A10): when this run is configured to
   // auto-approve approval-gated tools, the model needs to know it

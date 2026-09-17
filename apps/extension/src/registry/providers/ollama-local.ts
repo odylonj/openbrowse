@@ -31,7 +31,7 @@ export const definition: ProviderDefinition = {
       id: "qwen2.5:3b",
       name: "Qwen2.5 3B (Ollama)",
       capabilities: ["chat", "tools"],
-      contextWindow: 16384,
+      contextWindow: 8192,
       maxOutputTokens: 2048,
     },
     {
@@ -49,6 +49,13 @@ export const definition: ProviderDefinition = {
         try {
           const body = JSON.parse(init.body);
           if (body && typeof body === "object") {
+            const msgCount = Array.isArray(body.messages) ? body.messages.length : 0;
+            const toolsCount = Array.isArray(body.tools) ? body.tools.length : 0;
+            const toolNames = Array.isArray(body.tools) ? body.tools.map((t: any) => t.function?.name || t.type).join(", ") : "none";
+            const charLength = init.body.length;
+            const estTokens = Math.ceil(charLength / 4);
+            console.log(`[Ollama Local Diagnostic] Messages: ${msgCount} | Chars: ${charLength} (~${estTokens} tokens) | Tools: ${toolsCount} [${toolNames}]`);
+
             body.think = false;
             body.options = { ...(body.options || {}), think: false };
             init = { ...init, body: JSON.stringify(body) };
