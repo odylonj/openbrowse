@@ -31,8 +31,8 @@ export const definition: ProviderDefinition = {
       id: "qwen2.5:3b",
       name: "Qwen2.5 3B (Ollama)",
       capabilities: ["chat", "tools"],
-      contextWindow: 8192,
-      maxOutputTokens: 2048,
+      contextWindow: 4096,
+      maxOutputTokens: 512,
     },
     {
       id: "qwen3:4b",
@@ -44,15 +44,19 @@ export const definition: ProviderDefinition = {
   ],
   async createLanguageModel(config, modelId) {
     const { createOpenAICompatible } = await import("@ai-sdk/openai-compatible");
+    let reqCounter = 0;
     const customFetch: typeof fetch = async (input, init) => {
       if (init && typeof init.body === "string") {
         try {
           const body = JSON.parse(init.body);
           if (body && typeof body === "object") {
+            reqCounter++;
+            const reqNum = reqCounter;
             const startTime = Date.now();
+            const startIso = new Date(startTime).toISOString();
             const msgCount = Array.isArray(body.messages) ? body.messages.length : 0;
-            const toolsCount = Array.isArray(body.tools) ? body.tools.length : 0;
-            const toolNames = Array.isArray(body.tools) ? body.tools.map((t: any) => t.function?.name || t.type).join(", ") : "none";
+            const tools = Array.isArray(body.tools) ? body.tools : [];
+            const toolNames = tools.map((t: any) => t.function?.name || t.type).join(", ");
             const charLength = init.body.length;
             const estTokens = Math.ceil(charLength / 4);
 
@@ -60,18 +64,19 @@ export const definition: ProviderDefinition = {
             const sysChars = sysMsg?.content?.length ?? 0;
             const histChars = charLength - sysChars;
 
-            console.log(`[Ollama Local Latency & Payload] at ${new Date().toISOString()} | Messages: ${msgCount} | Sys Prompt Chars: ${sysChars} | History/Msgs Chars: ${histChars} | Total Chars: ${charLength} (~${estTokens} tokens) | Tools: ${toolsCount} [${toolNames}]`);
+            console.log(`[OLLAMA REQUEST #${reqNum}] purpose=chat/generation | time=${startIso} | totalBodyChars=${charLength} (~${estTokens} est. tokens) | sysChars=${sysChars} | histChars=${histChars} | toolsCount=${tools.length} [${toolNames}]`);
 
             body.think = false;
             body.options = { ...(body.options || {}), think: false, keep_alive: "30m" };
             init = { ...init, body: JSON.stringify(body) };
 
             const res = await fetch(input, init);
-            console.log(`[Ollama Local Latency] Response received in ${Date.now() - startTime}ms`);
+            const duration = Date.now() - startTime;
+            console.log(`[OLLAMA RESPONSE #${reqNum}] elapsedMs=${duration}ms status=${res.status}`);
             return res;
           }
-        } catch {
-          // Ignore non-JSON bodies
+        } catch (e) {
+          console.error("[Ollama Diagnostic Error]", e);
         }
       }
       return fetch(input, init);

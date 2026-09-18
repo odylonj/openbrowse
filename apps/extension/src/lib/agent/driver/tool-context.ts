@@ -334,8 +334,12 @@ function recoverySuffix(summary: string): string {
 
 export async function resolveTabIdOrThrow(
   ctx: ToolContext,
-  handle: string,
+  handle?: string | null,
 ): Promise<TabId> {
+  if (!handle) {
+    const activeTab = await ctx.driver.getActiveTab();
+    return activeTab.id;
+  }
   const sessionResult = ctx.session?.resolveHandle?.(handle);
   if (sessionResult == null) {
     const summary = await summarizeBoundHandles(ctx);
@@ -365,8 +369,11 @@ export async function resolveTabIdOrThrow(
 
 export async function resolveTabOrThrow(
   ctx: ToolContext,
-  handle: string,
+  handle?: string | null,
 ): Promise<BrowserTabInfo> {
+  if (!handle) {
+    return await ctx.driver.getActiveTab();
+  }
   const tabId = await resolveTabIdOrThrow(ctx, handle);
   try {
     return await ctx.driver.getTab(tabId);

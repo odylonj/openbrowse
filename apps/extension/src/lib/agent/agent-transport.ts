@@ -2345,6 +2345,30 @@ export async function createAgentTransport(
   const modelDef = provider.models.find((m) => m.id === actualModelId);
   setCurrentModelDef(modelDef);
   const isOllamaLocal = provider.id === "ollama-local";
+  if (isOllamaLocal) {
+    let isAskMode = true;
+    if (conversationId) {
+      try {
+        const conv = await chatDb.getConversation(conversationId);
+        if (conv && conv.mode === "act") {
+          isAskMode = false;
+        }
+      } catch {
+        isAskMode = true;
+      }
+    }
+    if (isAskMode) {
+      return createChatOnlyTransport({
+        model,
+        modelDef,
+        qualifiedModelId,
+        transportCid,
+        providerId: provider.id,
+        actualModelId,
+        thinkingConfig,
+      });
+    }
+  }
   const lightLocalQwen3 = isLightLocalQwen3(provider.id, actualModelId);
 
   // Headless (scheduled) run: register the per-conversation policy so the
@@ -2533,11 +2557,11 @@ export async function createAgentTransport(
 
   // Only inject the CUA delegation guidance when CUA is actually usable —
   // otherwise the model sees instructions for a subagent it can't delegate to.
-  if (cuaEnabled) {
+  if (!isOllamaLocal && cuaEnabled) {
     instructions += `\n\n${CUA_DELEGATION_PROMPT}`;
   }
 
-  if (spaceId && spaceName) {
+  if (!isOllamaLocal && spaceId && spaceName) {
     instructions += `\n\nYou are chatting from the space "${spaceName}" (id: ${spaceId}). When saving space-scoped memories, use \`scope: "space"\`.`;
 
     // Per-space user-defined instructions, edited in the home Spaces page.
@@ -2563,7 +2587,8 @@ export async function createAgentTransport(
   //
   // Always injected — the check is always-on and there is no
   // user-facing toggle.
-  instructions += `\n\n## Completion checks
+  if (!isOllamaLocal) {
+    instructions += `\n\n## Completion checks
 
 Your final response (text emitted without a tool call) will be reviewed by a skeptical evaluator before the user sees it. If the evaluator finds the response incomplete or unsupported, it will reject and you will receive a synthetic user-role message starting with the prefix \`[Completion check]\` containing structured concerns.
 
@@ -2575,10 +2600,11 @@ Concerns are tagged by dimension:
 - **noPrematureHandoff**: the response punts work back to the user that was within scope.
 
 To minimize wasted rejection rounds: before producing a final response, re-read the original request and confirm your todo list is fully closed out (or that every still-open todo has an explicit reason to remain open).`;
+  }
 
   // Inject current todo plan into system prompt
   const tcid = transportCid();
-  const conv = tcid ? await chatDb.getConversation(tcid) : null;
+  const conv = (!isOllamaLocal && tcid) ? await chatDb.getConversation(tcid) : null;
   if (conv?.todos && conv.todos.length > 0) {
     instructions += `\n\n### Current Plan (todoWrite)\n`;
     const inProgress = conv.todos.find((t) => t.status === "in_progress");
@@ -2721,7 +2747,7 @@ To minimize wasted rejection rounds: before producing a final response, re-read 
   if (isOllamaLocal) {
     effectiveBrowserTools = Object.fromEntries(
       Object.entries(browserTools).map(([name, tool]) => {
-        if ((name === "readPage" || name === "snapshot") && tool.execute) {
+        if (tool.execute) {
           const originalExecute = tool.execute;
           return [
             name,
@@ -2729,15 +2755,26 @@ To minimize wasted rejection rounds: before producing a final response, re-read 
               ...tool,
               execute: async (args: any, context: any) => {
                 const res = await originalExecute(args, context);
-                if (typeof res === "string" && res.length > 2000) {
-                  return res.substring(0, 2000) + "\n[truncated for local lite]";
-                }
-                if (res && typeof res === "object" && "content" in res && typeof (res as any).content === "string" && (res as any).content.length > 2000) {
+                if (!res || typeof res !== "object") return res;
+
+                if (name === "readPage") {
+                  const bodyText = typeof (res as any).bodyText === "string" ? (res as any).bodyText : "";
+                  const links = Array.isArray((res as any).links) ? (res as any).links.slice(0, 10) : [];
                   return {
-                    ...(res as any),
-                    content: (res as any).content.substring(0, 2000) + "\n[truncated for local lite]",
+                    ...res,
+                    bodyText: bodyText.length > 1500 ? bodyText.substring(0, 1500) + "\n[truncated]" : bodyText,
+                    links,
                   };
                 }
+
+                if ("snapshot" in res && typeof (res as any).snapshot === "string") {
+                  const snap = (res as any).snapshot;
+                  return {
+                    ...res,
+                    snapshot: snap.length > 2000 ? snap.substring(0, 2000) + "\n[truncated]" : snap,
+                  };
+                }
+
                 return res;
               },
             },
@@ -2750,13 +2787,19 @@ To minimize wasted rejection rounds: before producing a final response, re-read 
 
   // Compose the parent's full tool set BEFORE constructing `runSubagentAgentLoop`,
   // because the loop filters from this set when building the subagent's tools.
-  const parentTools = (lightLocalQwen3 || isOllamaLocal)
+  const parentTools = isOllamaLocal
     ? Object.fromEntries(
         Object.entries(effectiveBrowserTools).filter(([name]) =>
           LIGHT_LOCAL_QWEN3_TOOLS.has(name),
         ),
       )
-    : { ...browserTools, ...mcpTools };
+    : lightLocalQwen3
+      ? Object.fromEntries(
+          Object.entries(effectiveBrowserTools).filter(([name]) =>
+            LIGHT_LOCAL_QWEN3_TOOLS.has(name),
+          ),
+        )
+      : { ...browserTools, ...mcpTools };
 
   // Tools available ONLY inside a subagent run — never exposed to the
   // parent. `setTaskTitle` is the lone entry: it's how a subagent
@@ -3532,9 +3575,11 @@ Stay within the approved sites. If you need to touch a site not listed, call \`p
       // Append blocks; any can be empty. Mode block goes first (framing),
       // then situational state (legend, workspace), then the editing-artifact
       // block. Double-newline separators render them as distinct sections.
-      const tail = [modeBlock, legend, wsBlock, memBlock, editBlock]
-        .filter(Boolean)
-        .join("\n\n");
+      const tail = isOllamaLocal
+        ? legend
+        : [modeBlock, legend, wsBlock, memBlock, editBlock]
+            .filter(Boolean)
+            .join("\n\n");
       return {
         ...callArgs,
         instructions: tail
@@ -3624,6 +3669,7 @@ Stay within the approved sites. If you need to touch a site not listed, call \`p
       toolCallTrace,
       pinnedConversationId,
     }) => {
+      if (isOllamaLocal) return undefined;
       const cid = pinnedConversationId;
       if (!cid) return undefined;
 

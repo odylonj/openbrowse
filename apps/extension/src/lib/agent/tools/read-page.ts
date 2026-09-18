@@ -5,8 +5,9 @@ import { resolveTabOrThrow } from "../driver";
 const parameters = z.object({
   tab: z
     .string()
+    .optional()
     .describe(
-      "Tab handle to read (e.g. 't1'). See the `## Tabs in this conversation` section of the system prompt, or call listTabs.",
+      "Tab handle to read (e.g. 't1'). Optional — defaults to the active tab if omitted.",
     ),
 });
 
@@ -26,16 +27,17 @@ type Output = z.infer<typeof outputSchema>;
 export const readPageTool: BrowserTool<Input, Output> = {
   name: "readPage",
   description:
-    "Read the content of a tab. Pass `tab` (handle from the tab legend or listTabs). Returns the URL, title, headings, description, body text (first 10k chars), and up to 50 links.",
+    "Read the content of a tab. Pass `tab` (handle from the tab legend or listTabs), or omit to read the active tab. Returns the URL, title, headings, description, body text, and links.",
   parameters,
   outputSchema,
   execute: async ({ tab: handle }, ctx) => {
     const tab = await resolveTabOrThrow(ctx, handle);
+    const resolvedHandle = handle ?? "t1";
     const url = tab.url ?? "";
 
     if (url.startsWith("chrome-extension://") || url.startsWith("chrome://")) {
       return {
-        tab: handle,
+        tab: resolvedHandle,
         url,
         title: tab.title ?? "",
         h1: "",
@@ -49,6 +51,6 @@ export const readPageTool: BrowserTool<Input, Output> = {
       tab.id,
       { type: "CHAT_EXTRACT_CONTENT" },
     );
-    return { tab: handle, ...result };
+    return { tab: resolvedHandle, ...result };
   },
 };
