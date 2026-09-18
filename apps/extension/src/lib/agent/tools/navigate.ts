@@ -23,7 +23,8 @@ const parameters = z.preprocess((val) => {
   if (val && typeof val === "object" && !Array.isArray(val)) {
     const obj = val as Record<string, unknown>;
     if (typeof obj.url !== "string" && typeof obj.href === "string") {
-      return { ...obj, url: obj.href };
+      const { href, ...rest } = obj;
+      return { ...rest, url: href };
     }
   }
   return val;

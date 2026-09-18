@@ -232,7 +232,7 @@ Browser rules:
 - navigate returns a tab handle and a snapshot.
 - Keep using the same returned tab handle for the whole task.
 - Interactive elements in snapshots have refs like @e1.
-- Click only with clickElement({"tab":"t1","target":"@e1"}).
+- Use the exact tab handle returned by navigate. Example: if navigate returns t2, use clickElement({"tab":"t2","target":"@e1"}).
 - Never invent CSS selectors.
 - After navigate, inspect its returned snapshot before calling another read tool.
 - When the requested action is complete, answer briefly and stop.`;
