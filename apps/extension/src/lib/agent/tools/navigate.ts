@@ -2,6 +2,7 @@ import { z } from "zod";
 import { handleForTab, resolveTabOrThrow, type BrowserTabInfo } from "../driver";
 import { invalidateRefs } from "../ref-store";
 import { captureSnapshot } from "../snapshot-capture";
+import { getTargetLtid } from "../active-tab";
 import type { BrowserTool } from "../types";
 
 const rawParameters = z
@@ -72,60 +73,66 @@ export const navigateTool: BrowserTool<Input, Output> = {
         };
       }
     } else {
-      // No handle → try to reuse the active/sticky tab first. This implements
-      // the priority-based tab affinity: reuse if possible, navigate in place.
-      let target: BrowserTabInfo | null = null;
-      try {
-        target = await resolveTabOrThrow(ctx, undefined);
-      } catch {
-        target = null;
-      }
+      const cid = ctx.session?.conversationId;
+      const hasPinnedTarget = getTargetLtid(cid) != null;
 
-      if (target && target.id) {
+      if (hasPinnedTarget) {
+        // Target previously established — fail closed if unavailable (do NOT create new tab)
+        const target = await resolveTabOrThrow(ctx, undefined);
+        await ctx.driver.updateTabUrl(target.id, url);
+        tabId = target.id;
+      } else {
+        // Bootstrap path (no target yet)
+        let target: BrowserTabInfo | null = null;
         try {
-          await ctx.driver.updateTabUrl(target.id, url);
-          tabId = target.id;
+          target = await resolveTabOrThrow(ctx, undefined);
         } catch {
-          // fall through to create new tab if update failed
+          target = null;
         }
-      }
 
-      if (!tabId) {
-        // No usable tab to reuse → create a new background tab. This is the bootstrap
-        // path used on the first action of a conversation. The new tab
-        // should land in the conversation's own window — where the chat
-        // and the agent's existing tabs live — not whatever window Chrome
-        // happens to have focused.
-        let targetWindowId: number | undefined = ctx.session?.targetWindowId;
-        if (targetWindowId === undefined) {
+        if (target && target.id) {
           try {
-            targetWindowId = await Promise.resolve(
-              ctx.session?.resolveNewTabWindowId?.(),
-            ).catch(() => undefined);
+            await ctx.driver.updateTabUrl(target.id, url);
+            tabId = target.id;
           } catch {
-            targetWindowId = undefined;
+            // fall through to create new tab if update failed
           }
         }
-        if (targetWindowId === undefined && ctx.session?.conversationId) {
-          try {
-            const modulePath: string = "../conversation-window";
-            const mod = (await import(modulePath)) as {
-              resolveConversationWindowId: (
-                cid: string,
-              ) => Promise<number | undefined>;
-            };
-            targetWindowId = await mod.resolveConversationWindowId(
-              ctx.session.conversationId,
-            );
-          } catch {
-            // best-effort
+
+        if (!tabId) {
+          // No usable tab to reuse → create a new background tab. This is the bootstrap
+          // path used on the first action of a conversation.
+          let targetWindowId: number | undefined = ctx.session?.targetWindowId;
+          if (targetWindowId === undefined) {
+            try {
+              targetWindowId = await Promise.resolve(
+                ctx.session?.resolveNewTabWindowId?.(),
+              ).catch(() => undefined);
+            } catch {
+              targetWindowId = undefined;
+            }
           }
+          if (targetWindowId === undefined && ctx.session?.conversationId) {
+            try {
+              const modulePath: string = "../conversation-window";
+              const mod = (await import(modulePath)) as {
+                resolveConversationWindowId: (
+                  cid: string,
+                ) => Promise<number | undefined>;
+              };
+              targetWindowId = await mod.resolveConversationWindowId(
+                ctx.session.conversationId,
+              );
+            } catch {
+              // best-effort
+            }
+          }
+          tabId = await ctx.driver.createTab(url, {
+            active: false,
+            ...(targetWindowId !== undefined && { windowId: targetWindowId }),
+          });
+          createdNew = true;
         }
-        tabId = await ctx.driver.createTab(url, {
-          active: false,
-          ...(targetWindowId !== undefined && { windowId: targetWindowId }),
-        });
-        createdNew = true;
       }
     }
 
@@ -133,7 +140,9 @@ export const navigateTool: BrowserTool<Input, Output> = {
       await ctx.session?.bindTabsToConversation?.([tabId]);
     }
 
-    await ctx.driver.setActiveTab(tabId);
+    if (!handle) {
+      await ctx.driver.setActiveTab(tabId);
+    }
     // Navigation is a genuine page change — unlike click/type/scroll, the old
     // page's elements are gone, so we DO want a clean slate. Invalidating here
     // also clears the ref-store carry-over pool so stale cross-page refs can't
