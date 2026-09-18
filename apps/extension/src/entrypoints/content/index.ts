@@ -973,9 +973,30 @@ export default defineContentScript({
       }
       if (message.type === "CHAT_CLICK_ELEMENT") {
         try {
-          const el = document.querySelector(
-            message.selector,
-          ) as HTMLElement | null;
+          let el: HTMLElement | null = null;
+          const sel = message.selector;
+          if (sel.startsWith("el_btn_")) {
+            const idx = parseInt(sel.replace("el_btn_", ""), 10);
+            const btns = Array.from(document.querySelectorAll("button, [role='button']"));
+            el = (btns[idx] as HTMLElement) || null;
+          } else if (sel.startsWith("el_")) {
+            const idx = parseInt(sel.replace("el_", ""), 10);
+            const links = Array.from(document.querySelectorAll("a[href]"));
+            el = (links[idx] as HTMLElement) || null;
+          } else {
+            try {
+              el = document.querySelector(sel) as HTMLElement | null;
+            } catch {
+              // invalid selector syntax
+            }
+          }
+
+          if (!el) {
+            const allClickable = Array.from(document.querySelectorAll("a, button, [role='button'], input[type='submit']"));
+            const queryText = sel.replace(/^[@#.]/, "").toLowerCase();
+            el = (allClickable.find(node => node.textContent?.trim().toLowerCase().includes(queryText)) as HTMLElement) || null;
+          }
+
           if (!el) {
             sendResponse({
               success: false,
@@ -1224,11 +1245,19 @@ function extractDetailedContent() {
 
   const links = Array.from(document.querySelectorAll("a[href]"))
     .slice(0, 50)
-    .map((a) => ({
+    .map((a, i) => ({
+      id: `el_${i}`,
       text: (a as HTMLAnchorElement).textContent?.trim().slice(0, 100) || "",
       href: (a as HTMLAnchorElement).href,
     }))
     .filter((l) => l.text && l.href.startsWith("http"));
+
+  const buttons = Array.from(document.querySelectorAll("button, [role='button']"))
+    .slice(0, 50)
+    .map((b, i) => ({
+      id: `el_btn_${i}`,
+      text: (b as HTMLElement).textContent?.trim().slice(0, 100) || "button",
+    }));
 
   return {
     url: location.href,
@@ -1237,5 +1266,6 @@ function extractDetailedContent() {
     description: meta("description").slice(0, 500),
     bodyText: body.slice(0, 10000),
     links,
+    buttons,
   };
 }

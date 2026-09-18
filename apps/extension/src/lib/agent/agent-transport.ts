@@ -2759,15 +2759,17 @@ To minimize wasted rejection rounds: before producing a final response, re-read 
 
                 if (name === "readPage") {
                   const bodyText = typeof (res as any).bodyText === "string" ? (res as any).bodyText : "";
-                  const links = Array.isArray((res as any).links) ? (res as any).links.slice(0, 10) : [];
+                  const links = Array.isArray((res as any).links) ? (res as any).links.slice(0, 12) : [];
+                  const buttons = Array.isArray((res as any).buttons) ? (res as any).buttons.slice(0, 8) : [];
                   return {
                     ...res,
-                    bodyText: bodyText.length > 1500 ? bodyText.substring(0, 1500) + "\n[truncated]" : bodyText,
+                    bodyText: bodyText.length > 800 ? bodyText.substring(0, 800) + "\n[truncated]" : bodyText,
                     links,
+                    buttons,
                   };
                 }
 
-                if ("snapshot" in res && typeof (res as any).snapshot === "string") {
+                if (name === "snapshot" && typeof (res as any).snapshot === "string") {
                   const snap = (res as any).snapshot;
                   return {
                     ...res,
