@@ -3594,7 +3594,6 @@ Stay within the approved sites. If you need to touch a site not listed, call \`p
       };
     },
     onStepFinish: (stepResult) => {
-      modelCallCount++;
       toolCallCount += stepResult.toolCalls.length;
       const totalElapsed = Math.round(performance.now() - taskStartTime);
       console.log(`[OLLAMA PERF] request=${modelCallCount} toolCallsThisStep=${stepResult.toolCalls.length} totalToolCalls=${toolCallCount} totalElapsedMs=${totalElapsed}ms`);

@@ -218,7 +218,22 @@ export async function getActiveUserTab(opts: {
     }
   }
 
-  // 1. Priority absolute: currently active HTTP/HTTPS tab in the window containing OpenBrowse
+  // 1. Pinned target first
+  if (pinned != null) {
+    const ctid = tabRegistry.toChromeTabId(pinned);
+    if (ctid != null) {
+      try {
+        const tab = await chrome.tabs.get(ctid);
+        if (tab && !isInternalChromeUrl(tab.url)) return tab;
+      } catch {
+        // Tracked tab no longer exists
+        if (cid != null) targetLtidByCid.delete(cid);
+        else fallbackTargetLtid = null;
+      }
+    }
+  }
+
+  // 2. Active tab as bootstrap
   const query: chrome.tabs.QueryInfo = { active: true };
   if (scopedWindowId !== undefined) {
     query.windowId = scopedWindowId;
@@ -235,22 +250,7 @@ export async function getActiveUserTab(opts: {
     }
   }
 
-  // 2. Otherwise, last HTTP/HTTPS tab associated with this conversation/task
-  if (pinned != null) {
-    const ctid = tabRegistry.toChromeTabId(pinned);
-    if (ctid != null) {
-      try {
-        const tab = await chrome.tabs.get(ctid);
-        if (tab && !isInternalChromeUrl(tab.url)) return tab;
-      } catch {
-        // Tracked tab no longer exists; clear and fall through to fallback.
-        if (cid != null) targetLtidByCid.delete(cid);
-        else fallbackTargetLtid = null;
-      }
-    }
-  }
-
-  // 3. Otherwise, any non-internal tab in the window
+  // 3. Fallback to any non-internal tab in the window
   const allTabs = await chrome.tabs.query(scopedWindowId !== undefined ? { windowId: scopedWindowId } : { currentWindow: true });
   for (const tab of allTabs) {
     if (tab.id && !isInternalChromeUrl(tab.url)) {

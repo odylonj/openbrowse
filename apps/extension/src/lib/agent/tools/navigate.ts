@@ -4,17 +4,30 @@ import { invalidateRefs } from "../ref-store";
 import { captureSnapshot } from "../snapshot-capture";
 import type { BrowserTool } from "../types";
 
-const parameters = z
+const rawParameters = z
   .object({
     url: z.string().describe("The URL to navigate to"),
     tab: z
       .string()
       .optional()
       .describe(
-        "Tab handle (e.g. 't1') to navigate. Omit to open a new background tab — that's the only way to acquire a fresh handle, e.g. on the first action of a conversation. See the `## Tabs in this conversation` section of the system prompt, or call listTabs.",
+        "Tab handle (e.g. 't1') to navigate. Omit to use the conversation's target tab (or current active tab).",
       ),
   })
   .strict();
+
+const parameters = z.preprocess((val) => {
+  if (typeof val === "string") {
+    return { url: val };
+  }
+  if (val && typeof val === "object" && !Array.isArray(val)) {
+    const obj = val as Record<string, unknown>;
+    if (typeof obj.url !== "string" && typeof obj.href === "string") {
+      return { ...obj, url: obj.href };
+    }
+  }
+  return val;
+}, rawParameters);
 
 type Input = z.infer<typeof parameters>;
 
@@ -32,7 +45,7 @@ type Output = z.infer<typeof outputSchema>;
 export const navigateTool: BrowserTool<Input, Output> = {
   name: "navigate",
   description:
-    "Navigate to a URL. Pass `tab` to navigate an existing tab (the response includes that handle); omit `tab` to open a new background tab and receive a fresh handle in the response. The response automatically includes a snapshot of the landed page so you can interact immediately. Use this as the first action of a conversation when you have no handles yet.",
+    "Navigate to a URL. Pass `tab` to navigate an existing tab; omit `tab` to use the conversation's target tab (or active tab if none set). The response automatically includes a snapshot of the landed page so you can interact immediately.",
   parameters,
   outputSchema,
   execute: async ({ url, tab: handle }, ctx) => {

@@ -1,13 +1,12 @@
 import { z } from "zod";
 import type { BrowserTool } from "../types";
-import { resolveTabOrThrow } from "../driver";
+import { resolveTabOrThrow, handleForTab } from "../driver";
 
 const parameters = z.object({
   tab: z
     .string()
-    .optional()
     .describe(
-      "Tab handle to read (e.g. 't1'). Optional — defaults to the active tab if omitted.",
+      "Tab handle to read (e.g. 't1').",
     ),
 });
 
@@ -32,7 +31,7 @@ export const readPageTool: BrowserTool<Input, Output> = {
   outputSchema,
   execute: async ({ tab: handle }, ctx) => {
     const tab = await resolveTabOrThrow(ctx, handle);
-    const resolvedHandle = handle ?? "t1";
+    const resolvedHandle = handleForTab(ctx, tab.id);
     const url = tab.url ?? "";
 
     if (url.startsWith("chrome-extension://") || url.startsWith("chrome://")) {
