@@ -227,13 +227,13 @@ export async function getActiveUserTab(opts: {
         if (tab && !isInternalChromeUrl(tab.url)) return tab;
       } catch {
         // Tracked tab no longer exists
-        if (cid != null) targetLtidByCid.delete(cid);
-        else fallbackTargetLtid = null;
       }
     }
+    // Target was set but is unusable (closed or internal) — fail closed.
+    throw new Error("Conversation target tab is unavailable. The target tab may have been closed.");
   }
 
-  // 2. Active tab as bootstrap
+  // 2. Active tab as bootstrap (only if no target was pinned)
   const query: chrome.tabs.QueryInfo = { active: true };
   if (scopedWindowId !== undefined) {
     query.windowId = scopedWindowId;

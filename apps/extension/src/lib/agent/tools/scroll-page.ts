@@ -5,8 +5,9 @@ import type { BrowserTool } from "../types";
 const parameters = z.object({
   tab: z
     .string()
+    .optional()
     .describe(
-      "Tab handle to scroll (e.g. 't1'). See the `## Tabs in this conversation` section of the system prompt, or call listTabs.",
+      "Tab handle to scroll (e.g. 't1'). Optional — defaults to the conversation's target tab.",
     ),
   direction: z
     .enum(["up", "down"])

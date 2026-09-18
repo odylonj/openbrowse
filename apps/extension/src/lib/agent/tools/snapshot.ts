@@ -6,8 +6,9 @@ import { captureSnapshot, diffSnapshots } from "../snapshot-capture";
 const parameters = z.object({
   tab: z
     .string()
+    .optional()
     .describe(
-      "Tab handle to snapshot (e.g. 't1'). See the `## Tabs in this conversation` section of the system prompt, or call listTabs.",
+      "Tab handle to snapshot (e.g. 't1'). Optional — defaults to the conversation's target tab.",
     ),
   mode: z
     .enum(["interactive", "full", "viewport"])

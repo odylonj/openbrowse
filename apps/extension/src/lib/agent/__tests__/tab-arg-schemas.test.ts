@@ -25,22 +25,9 @@ import {
 describe("tab-arg schemas", () => {
   describe("required `tab` arg on tab-interacting tools", () => {
     const cases: Array<{ name: string; tool: { parameters: unknown }; extra?: Record<string, unknown> }> = [
-      { name: "snapshot", tool: snapshotTool },
-      { name: "readPage", tool: readPageTool },
       { name: "read_network_requests", tool: readNetworkRequestsTool },
       { name: "read_console_messages", tool: readConsoleMessagesTool },
       { name: "screenshot", tool: screenshotTool },
-      { name: "scrollPage", tool: scrollPageTool, extra: { direction: "down" } },
-      {
-        name: "clickElement",
-        tool: clickElementTool,
-        extra: { target: "@e1" },
-      },
-      {
-        name: "typeInElement",
-        tool: typeInElementTool,
-        extra: { target: "@e1", text: "hi" },
-      },
       {
         name: "executeOnPage",
         tool: executeOnPageTool,
@@ -62,6 +49,38 @@ describe("tab-arg schemas", () => {
         const schema = tool.parameters as { safeParse: (i: unknown) => { success: boolean } };
         const result = schema.safeParse({ ...(extra ?? {}) });
         expect(result.success).toBe(false);
+      });
+
+      it(`${name} accepts input with \`tab\``, () => {
+        const schema = tool.parameters as { safeParse: (i: unknown) => { success: boolean } };
+        const result = schema.safeParse({ tab: "t1", ...(extra ?? {}) });
+        expect(result.success).toBe(true);
+      });
+    }
+  });
+
+  describe("optional `tab` arg on tab-interacting tools", () => {
+    const cases: Array<{ name: string; tool: { parameters: unknown }; extra?: Record<string, unknown> }> = [
+      { name: "snapshot", tool: snapshotTool },
+      { name: "readPage", tool: readPageTool },
+      { name: "scrollPage", tool: scrollPageTool, extra: { direction: "down" } },
+      {
+        name: "clickElement",
+        tool: clickElementTool,
+        extra: { target: "@e1" },
+      },
+      {
+        name: "typeInElement",
+        tool: typeInElementTool,
+        extra: { target: "@e1", text: "hi" },
+      },
+    ];
+
+    for (const { name, tool, extra } of cases) {
+      it(`${name} accepts input without \`tab\``, () => {
+        const schema = tool.parameters as { safeParse: (i: unknown) => { success: boolean } };
+        const result = schema.safeParse({ ...(extra ?? {}) });
+        expect(result.success).toBe(true);
       });
 
       it(`${name} accepts input with \`tab\``, () => {

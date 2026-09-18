@@ -5,8 +5,9 @@ import { resolveTabOrThrow, handleForTab } from "../driver";
 const parameters = z.object({
   tab: z
     .string()
+    .optional()
     .describe(
-      "Tab handle to read (e.g. 't1').",
+      "Tab handle to read (e.g. 't1'). Optional — defaults to the conversation's target tab.",
     ),
 });
 
