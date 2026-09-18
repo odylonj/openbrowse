@@ -3460,6 +3460,10 @@ To minimize wasted rejection rounds: before producing a final response, re-read 
       .join("\n\n");
   }
 
+  const taskStartTime = performance.now();
+  let modelCallCount = 0;
+  let toolCallCount = 0;
+
   const agent = new ToolLoopAgent({
     model,
     tools,
@@ -3469,17 +3473,10 @@ To minimize wasted rejection rounds: before producing a final response, re-read 
     }),
     ...(isOllamaLocal && { maxOutputTokens: 512, maxSteps: 6 }),
     ...(lightLocalQwen3 && { maxOutputTokens: 2_048 }),
-    // Note: we deliberately do NOT thread an `experimental_context` here.
-    // Every tool registered with this agent is wrapped by `toSDKTool`,
-    // which builds a fresh `ToolContext` per tool call pinned to the
-    // conversation id captured synchronously at execute-entry. This
-    // guarantees pinning at the per-tool-call grain, which is the only
-    // grain that survives mid-stream conversation switches.
-    // Append a fresh tab legend on every model call. The SDK invokes
-    // prepareCall right before each generate/stream, so this picks up
-    // tabs added by `navigate`, removed by closure, etc. — even
-    // mid-conversation.
     prepareCall: async (callArgs) => {
+      modelCallCount++;
+      const callStart = performance.now();
+      // ...
       const legend = await buildLegendBlock();
       // Workspace-files block: enumerate /workspace per turn so the agent
       // sees its own artifacts (saveAs outputs, executePython writes,
@@ -3595,6 +3592,19 @@ Stay within the approved sites. If you need to touch a site not listed, call \`p
       };
     },
     onStepFinish: (stepResult) => {
+      modelCallCount++;
+      toolCallCount += stepResult.toolCalls.length;
+      const totalElapsed = Math.round(performance.now() - taskStartTime);
+      console.log(`[OLLAMA PERF] request=${modelCallCount} toolCallsThisStep=${stepResult.toolCalls.length} totalToolCalls=${toolCallCount} totalElapsedMs=${totalElapsed}ms`);
+      for (const tc of stepResult.toolCalls) {
+        if (tc) {
+          console.log(`[OLLAMA PERF] tool=${tc.toolName}`);
+        }
+      }
+      if (stepResult.finishReason === "stop") {
+        console.log(`[OLLAMA PERF] summary: total=${totalElapsed}ms modelCalls=${modelCallCount} toolCalls=${toolCallCount}`);
+      }
+
       const usage = stepResult.usage;
       if (usage.inputTokens != null || usage.outputTokens != null) {
         transportLastTotalTokens =
