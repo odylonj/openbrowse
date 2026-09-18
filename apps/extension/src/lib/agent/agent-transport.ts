@@ -1028,6 +1028,15 @@ const LIGHT_LOCAL_QWEN3_TOOLS = new Set([
   "scrollPage",
 ]);
 
+export const LOCAL_OLLAMA_TOOLS = new Set([
+  "readPage",
+  "snapshot",
+  "clickElement",
+  "typeInElement",
+  "navigate",
+  "scrollPage",
+]);
+
 function isLightLocalQwen3(providerId: string, modelId: string): boolean {
   return providerId === "web-llm" && /^Qwen3-(?:4B|1\.7B)-/.test(modelId);
 }
@@ -2792,7 +2801,7 @@ To minimize wasted rejection rounds: before producing a final response, re-read 
   const parentTools = isOllamaLocal
     ? Object.fromEntries(
         Object.entries(effectiveBrowserTools).filter(([name]) =>
-          LIGHT_LOCAL_QWEN3_TOOLS.has(name),
+          LOCAL_OLLAMA_TOOLS.has(name),
         ),
       )
     : lightLocalQwen3
