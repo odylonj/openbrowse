@@ -202,49 +202,10 @@ export async function getActiveUserTab(opts: {
   const cid = await resolveCidAsync(opts.conversationId);
   const pinned = cid != null ? targetLtidByCid.get(cid) : fallbackTargetLtid;
 
-  if (pinned != null) {
-    const ctid = tabRegistry.toChromeTabId(pinned);
-    if (ctid != null) {
-      try {
-        const tab = await chrome.tabs.get(ctid);
-        if (tab) return tab;
-      } catch {
-        // Tracked tab no longer exists; clear and fall through to bootstrap.
-        if (cid != null) targetLtidByCid.delete(cid);
-        else fallbackTargetLtid = null;
-      }
-    } else {
-      // Registry can't resolve the pinned ltid (e.g. SW restart hasn't
-      // re-registered it yet). Clear and bootstrap.
-      if (cid != null) targetLtidByCid.delete(cid);
-      else fallbackTargetLtid = null;
-    }
-  }
-
-  // Bootstrap: only on first tool call. Reject extension/chrome pages so the
-  // agent never pins its target to its own UI. Scope the query to the
-  // conversation's window when we have one; otherwise legacy focused-window
-  // fallback.
-  //
-  // Window resolution order: explicit `opts.windowId` → lazy resolve via
-  // `conversation-window.resolveConversationWindowId(cid)` → legacy
-  // `currentWindow: true`. The lazy step is what makes this work without
-  // every driver caller passing a window id explicitly: cid alone is
-  // enough to pin the bootstrap to the conversation's correct window.
+  // Resolve scopedWindowId once
   let scopedWindowId: number | undefined = opts.windowId;
   if (scopedWindowId === undefined && cid != null) {
     try {
-      // Variable indirection (instead of a string-literal `import(...)`)
-      // is deliberate: it hides this module from tsc's static module-graph
-      // walk so consumers that compile against a subset of the extension's
-      // source tree (notably `packages/bench`, which has no `@/*` path
-      // alias and no chrome ambient types) don't transitively typecheck
-      // `conversation-window.ts` + its `chatDb` / `storage` / `chrome.*`
-      // dependencies. The runtime resolution is unaffected — extension
-      // bundlers (Vite/Rollup/wxt) follow the call dynamically and ship
-      // the module as a chunk. The module never executes in bench (gated
-      // upstream by `isServiceWorkerContext`), so the type opacity is a
-      // pure compile-time hygiene win, not a behavioural change.
       const modulePath: string = "./conversation-window";
       const mod = (await import(modulePath)) as {
         resolveConversationWindowId: (
@@ -253,9 +214,11 @@ export async function getActiveUserTab(opts: {
       };
       scopedWindowId = await mod.resolveConversationWindowId(cid);
     } catch {
-      // best-effort; legacy fallback below.
+      // best-effort
     }
   }
+
+  // 1. Priority absolute: currently active HTTP/HTTPS tab in the window containing OpenBrowse
   const query: chrome.tabs.QueryInfo = { active: true };
   if (scopedWindowId !== undefined) {
     query.windowId = scopedWindowId;
@@ -272,7 +235,22 @@ export async function getActiveUserTab(opts: {
     }
   }
 
-  // Fallback: query all tabs in the window and pick the first non-internal tab
+  // 2. Otherwise, last HTTP/HTTPS tab associated with this conversation/task
+  if (pinned != null) {
+    const ctid = tabRegistry.toChromeTabId(pinned);
+    if (ctid != null) {
+      try {
+        const tab = await chrome.tabs.get(ctid);
+        if (tab && !isInternalChromeUrl(tab.url)) return tab;
+      } catch {
+        // Tracked tab no longer exists; clear and fall through to fallback.
+        if (cid != null) targetLtidByCid.delete(cid);
+        else fallbackTargetLtid = null;
+      }
+    }
+  }
+
+  // 3. Otherwise, any non-internal tab in the window
   const allTabs = await chrome.tabs.query(scopedWindowId !== undefined ? { windowId: scopedWindowId } : { currentWindow: true });
   for (const tab of allTabs) {
     if (tab.id && !isInternalChromeUrl(tab.url)) {
